@@ -9,12 +9,28 @@ Install the SDK first:
 
 Start the server in another terminal:
 
-    python app.py
+    python app.py            # or: .\\start.ps1
 
 Then run this from the project root:
 
     python examples/06_server_openai_sdk.py
 """
+
+# Make the project importable when this file is run directly, and repair NO_PROXY
+# before the SDK builds its httpx client — see deepseek/_envfix.py for why. Any
+# client that talks to the server over httpx needs this, not just this example.
+import pathlib
+import sys
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+from deepseek._envfix import sanitize_no_proxy
+
+sanitize_no_proxy()
+
+# The reply below is in Hindi, which a CP936/GBK console cannot encode — that
+# raises UnicodeEncodeError as soon as output is piped. Be explicit about UTF-8.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 from openai import OpenAI
 
@@ -22,12 +38,15 @@ from openai import OpenAI
 client = OpenAI(base_url="http://localhost:8000/v1", api_key="unused")
 
 completion = client.chat.completions.create(
-    # model picks WHICH model answers: deepseek-chat (fast) or deepseek-expert
-    # (stronger, slower). thinking (DeepThink) and search (web) are independent
-    # toggles; they ride in extra_body, since they're outside OpenAI's schema.
-    model="deepseek-expert",
-    messages=[{"role": "system", "content" : "You are a helpful agent who always replies in Hindi"}, {"role": "user", "content": "what is better macbook or framework."}],
-    extra_body={"thinking": True, "search": True, "conversation_id" : "320ab157-cf58-4074-9869-27dc1bcccf78:2"},   # also: "search": True for web search
+    # deepseek-chat is the only model the server exposes. thinking (DeepThink)
+    # and search (web) are independent toggles; they ride in extra_body, since
+    # they're outside OpenAI's schema.
+    model="deepseek-chat",
+    messages=[
+        {"role": "system", "content": "You are a helpful agent who always replies in Hindi"},
+        {"role": "user", "content": "what is better macbook or framework."},
+    ],
+    extra_body={"thinking": True, "search": True},
 )
 print(completion.choices[0].message.content)
 
@@ -39,7 +58,7 @@ print("conversation_id:", cid)
 # To continue that conversation, send the id back via extra_body too:
 #
 #   client.chat.completions.create(
-#       model="deepseek-expert",
+#       model="deepseek-chat",
 #       messages=[{"role": "user", "content": "What's my name?"}],
 #       extra_body={"conversation_id": cid, "thinking": True},
 #   )

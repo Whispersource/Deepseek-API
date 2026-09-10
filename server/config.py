@@ -16,15 +16,19 @@ SERVER_INTERACTIVE_LOGIN = os.getenv("SERVER_INTERACTIVE_LOGIN", "1").lower() no
 
 # Public model ids the server advertises (via /v1/models) and accepts, mapped to
 # DeepSeek's `model_type` wire value. This is the MODEL axis ONLY — it picks
-# which model answers. DeepThink and web Search are orthogonal tools requested
-# per call via `tool_names` (see deepseek.client.KNOWN_TOOLS), never encoded in
-# the model name.
+# which model answers. DeepThink and web Search are orthogonal toggles requested
+# per call via `thinking` / `search`, never encoded in the model name.
 #
-# "vision" is deferred: it only does anything with an image attached, which needs
-# ref_file_ids / file-upload plumbing we don't have yet.
+# ONE entry, deliberately. DeepSeek merged Fast / Expert / Vision on 2026-09-10:
+# the backend still accepts `model_type` "expert" and "vision", but the model
+# config the web app downloads marks both `enabled: false, switchable: false`, so
+# they are retired from the product surface and may begin failing without notice.
+# `default` (快速模式) is the single live mode, and the capabilities Expert used
+# to gate — DeepThink reasoning and web search — are requested per call instead.
+#
+# To re-expose a model, add an id -> wire value pair here.
 MODEL_MAP = {
-    "deepseek-chat":   "default",   # Instant — the fast default model
-    "deepseek-expert": "expert",    # Expert  — the stronger, slower model
+    "deepseek-chat": "default",   # 快速模式 — the single live model
 }
 
 DEFAULT_MODEL = "deepseek-chat"

@@ -35,7 +35,7 @@ You sign in once in a browser with your DeepSeek account; your session is saved 
 
 - **Free:** uses your normal signed-in DeepSeek account, no API billing.
 - **Drop-in OpenAI replacement:** point any OpenAI client at `localhost` and it just works.
-- **Full DeepSeek toolset:** pick the fast or expert model, and toggle DeepThink reasoning and web search per request.
+- **Full DeepSeek toolset:** the one live model, with per-request DeepThink reasoning and web search toggles.
 - **Streaming + conversations:** token-by-token output and multi-turn threads addressed by `conversation_id`.
 
 ---
@@ -194,20 +194,27 @@ Chrome profile when possible; only a full expiry sends you back to the browser.
 
 ## Models, DeepThink & web search
 
-The `model` name selects **which model** answers. DeepThink and web search are
-**not** models — they're orthogonal toggles you pass per request.
+There is **one** model. DeepThink and web search are **not** models — they're
+orthogonal toggles you pass per request.
 
 | Model | DeepSeek mode | Notes |
 | --- | --- | --- |
-| `deepseek-chat` | Instant | Fast default model |
-| `deepseek-expert` | Expert | Stronger, slower |
+| `deepseek-chat` | 快速模式 (`default`) | The single live model |
+
+DeepSeek merged its Fast / Expert / Vision modes on 2026-09-10. The old
+`deepseek-expert` id is gone from this server: the backend still accepts
+`model_type: "expert"`, but the model config the web app downloads marks it
+`enabled: false, switchable: false`, so it is no longer a supported surface and
+can start failing without notice. What Expert used to gate — DeepThink reasoning
+and web search — is requested per call instead, which is also how the web app
+itself now works.
 
 Pass `thinking: true` (DeepThink reasoning) and/or `search: true` (web search) in
 the request body — or via the OpenAI SDK's `extra_body`:
 
 ```python
 resp = client.chat.completions.create(
-    model="deepseek-expert",
+    model="deepseek-chat",
     messages=[{"role": "user", "content": "What changed in the news today?"}],
     extra_body={"thinking": True, "search": True},
 )

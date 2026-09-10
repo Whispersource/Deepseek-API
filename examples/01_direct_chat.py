@@ -24,12 +24,14 @@ client = DeepSeekClient()
 
 # .chat() waits for the FULL reply, then returns it.
 #
-# model picks which model answers: "default" (Instant, the fast default) or
-# "expert" (stronger, slower). thinking enables DeepThink reasoning and search
-# enables web search; both are independent of the model. All are optional.
+# model is DeepSeek's model_type wire value. "default" (快速模式) is the single
+# live mode — DeepSeek merged Fast / Expert / Vision on 2026-09-10, so the old
+# "expert" value is retired. thinking enables DeepThink reasoning and search
+# enables web search; both are independent of the model, and they now carry the
+# capabilities Expert used to gate. All are optional.
 reply = client.chat(
     "Say hello in one short sentence.",
-    model="expert",
+    model="default",
     thinking=True,
 )
 print(reply.text)

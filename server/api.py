@@ -30,7 +30,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from starlette.concurrency import run_in_threadpool
 
 from deepseek.auth import LoginRequired
-from deepseek.client import DeepSeekClient
+from deepseek.client import DeepSeekClient, DeepSeekError
 
 from .config import (
     MODEL_MAP,
@@ -39,7 +39,12 @@ from .config import (
     is_known_model,
     resolve_model_type,
 )
-from .openai_format import completion_response, messages_to_prompt, stream_chunks
+from .openai_format import (
+    completion_response,
+    error_chunk,
+    messages_to_prompt,
+    stream_chunks,
+)
 from .ratelimit import RateLimiter, install_rate_limit
 from .schemas import ChatCompletionRequest
 
@@ -73,11 +78,25 @@ def get_client() -> DeepSeekClient:
     return _client
 
 
-def _error(message: str, status: int = 500, err_type: str = "server_error"):
+def _error(message: str, status: int = 500, err_type: str = "server_error",
+           headers: dict = None):
     return JSONResponse(
         status_code=status,
         content={"error": {"message": message, "type": err_type}},
+        headers=headers,
     )
+
+
+def _deepseek_error(e: DeepSeekError):
+    """Map a DeepSeek-reported failure onto a proper HTTP status.
+
+    Upstream throttling becomes a 429 so OpenAI clients back off and retry
+    automatically; anything else is reported as a bad-gateway error.
+    """
+    if e.finish_reason == "rate_limit_reached":
+        return _error(str(e), status=429, err_type="rate_limit_error",
+                      headers={"Retry-After": "5"})
+    return _error(str(e), status=502, err_type="upstream_error")
 
 
 @app.get("/healthz")
@@ -112,7 +131,8 @@ async def chat_completions(req: ChatCompletionRequest):
     # A thread's model is fixed when it's created, so on resume we ignore `model`
     # (the OpenAI SDK always sends one) and let the existing thread's model stand.
     model_type = None if req.conversation_id else resolve_model_type(req.model)
-    prompt = messages_to_prompt(req.messages)
+    has_tools = bool(req.tools)
+    prompt = messages_to_prompt(req.messages, tools=req.tools)
 
     try:
         # Off the event loop: get_client() uses Playwright's sync API, which
@@ -129,7 +149,14 @@ async def chat_completions(req: ChatCompletionRequest):
                 prompt, conversation_id=req.conversation_id,
                 model=model_type, thinking=req.thinking, search=req.search,
             )
-            yield from stream_chunks(req.model, stream)
+            try:
+                yield from stream_chunks(req.model, stream, has_tools=has_tools)
+            except DeepSeekError as e:
+                # The HTTP status is already committed, so report in-band.
+                yield error_chunk(str(e), "rate_limit_error"
+                                  if e.finish_reason == "rate_limit_reached"
+                                  else "upstream_error")
+                yield "data: [DONE]\n\n"
 
         return StreamingResponse(gen(), media_type="text/event-stream")
 
@@ -138,7 +165,11 @@ async def chat_completions(req: ChatCompletionRequest):
             client.chat, prompt, req.conversation_id,
             model_type, req.thinking, req.search,
         )
+    except DeepSeekError as e:
+        return _deepseek_error(e)
     except Exception as e:
         return _error(f"DeepSeek request failed: {e}")
 
-    return completion_response(req.model, reply.text, prompt, reply.conversation_id)
+    return completion_response(req.model, reply.text, prompt, reply.conversation_id,
+                               reasoning=getattr(reply, "reasoning", ""),
+                               has_tools=has_tools)

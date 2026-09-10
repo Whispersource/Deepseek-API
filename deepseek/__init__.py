@@ -1,7 +1,13 @@
 """Unofficial OpenAI-compatible client for chat.deepseek.com."""
 
-from .auth import Session, get_session, login
-from .client import DeepSeekClient, Reply
-from .pow import DeepSeekPow
+# Must run before .client builds its httpx.Client — see deepseek/_envfix.py.
+from ._envfix import sanitize_no_proxy as _sanitize_no_proxy
 
-__all__ = ["Session", "get_session", "login", "DeepSeekClient", "Reply", "DeepSeekPow"]
+_sanitize_no_proxy()
+
+from .auth import Session, get_session, login  # noqa: E402
+from .client import DeepSeekClient, DeepSeekError, Reply  # noqa: E402
+from .pow import DeepSeekPow  # noqa: E402
+
+__all__ = ["Session", "get_session", "login", "DeepSeekClient", "DeepSeekError",
+           "Reply", "DeepSeekPow"]
